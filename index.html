@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Private Secure Connect</title>
+  
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0b141a; color: #e9edef; min-height: 100vh; display: flex; flex-direction: column; }
+    
+    .header { background: #202c33; padding: 18px 20px; text-align: center; font-size: 22px; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.3); z-index: 10; letter-spacing: 1px; }
+    .container { flex: 1; padding: 20px; max-width: 450px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; justify-content: center; }
+
+    .auth-box { background: #202c33; padding: 30px 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center; display: none; }
+    .auth-box h2 { margin-bottom: 25px; font-size: 24px; color: #00a884; }
+    
+    input { width: 100%; padding: 15px 20px; margin-bottom: 15px; border-radius: 25px; background: #2a3942; color: #d1d7db; border: 1px solid transparent; font-size: 16px; outline: none; transition: 0.3s; }
+    input:focus { border: 1px solid #00a884; background: #32434d; }
+    
+    button { width: 100%; padding: 15px; background: #00a884; color: #111b21; border: none; border-radius: 25px; font-size: 17px; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+    button:hover { background: #008f6f; }
+    
+    .toggle-link { margin-top: 20px; font-size: 14px; color: #8696a0; cursor: pointer; transition: 0.2s; }
+    .toggle-link:hover { color: #00a884; text-decoration: underline; }
+
+    #dashboardSection { display: none; flex-direction: column; justify-content: flex-start; margin-top: 20px; }
+    .dash-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+    .dash-header h2 { font-size: 22px; }
+    .dash-header span { color: #00a884; }
+    
+    .menu-icon { font-size: 28px; cursor: pointer; padding: 0 10px; color: #8696a0; }
+    .menu-icon:hover { color: #e9edef; }
+
+    .search-box { display: flex; gap: 10px; margin-bottom: 30px; }
+    .search-box input { margin-bottom: 0; }
+    .search-box button { margin-top: 0; width: auto; padding: 0 25px; }
+
+    .chat-list-title { font-size: 16px; color: #8696a0; margin-bottom: 15px; border-bottom: 1px solid #2a3942; padding-bottom: 10px; }
+    .chat-item { background: #202c33; padding: 18px 20px; margin-bottom: 10px; border-radius: 12px; cursor: pointer; display: flex; align-items: center; gap: 15px; transition: 0.2s; }
+    .chat-item:hover { background: #2a3942; transform: translateX(5px); }
+    .chat-avatar { width: 45px; height: 45px; background: #00a884; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #111b21; font-weight: bold; }
+    .chat-info strong { font-size: 17px; }
+
+    .menu-popup { display: none; position: fixed; top: 75px; right: 20px; background: #233138; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); z-index: 100; min-width: 140px; }
+    .menu-popup p { padding: 15px 20px; margin: 0; cursor: pointer; transition: 0.2s; font-size: 16px; color: #ff5b5b; font-weight: bold; }
+    .menu-popup p:hover { background: #182229; }
+  </style>
+</head>
+<body>
+
+  <div class="header">🔒 SecureConnect</div>
+
+  <div class="container">
+    <div class="auth-box" id="loginScreen">
+      <h2>Welcome Back</h2>
+      <input type="text" id="loginId" placeholder="Enter your ID" autocomplete="off" />
+      <input type="password" id="loginPass" placeholder="Enter password" />
+      <button onclick="loginUser()">Login</button>
+      <div class="toggle-link" onclick="switchScreen('registerScreen')">Don't have an account? Register here</div>
+    </div>
+
+    <div class="auth-box" id="registerScreen">
+      <h2>Create Account</h2>
+      <input type="text" id="regId" placeholder="Choose a unique ID" autocomplete="off" />
+      <input type="password" id="regPass" placeholder="Create a password" />
+      <button onclick="registerUser()">Register</button>
+      <div class="toggle-link" onclick="switchScreen('loginScreen')">Already have an account? Login here</div>
+    </div>
+
+    <div id="dashboardSection">
+      <div class="dash-header">
+        <h2>Hi, <span id="usernameDisplay"></span></h2>
+        <div class="menu-icon" onclick="toggleMenu()">⋮</div>
+      </div>
+
+      <div class="search-box">
+        <input type="text" id="searchUser" placeholder="Friend's ID..." autocomplete="off" />
+        <button onclick="startNewChat()">Chat</button>
+      </div>
+
+      <div class="chat-list-title">Recent Chats</div>
+      <div id="recentChats"></div>
+    </div>
+  </div>
+
+  <div id="logoutMenu" class="menu-popup">
+    <p onclick="logoutUser()">Log Out 🚪</p>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyB2o5DXG0r249JfueFAL7ybXiDspUdW0Ns",
+      authDomain: "privateconnect-37f5b.firebaseapp.com",
+      databaseURL: "https://privateconnect-37f5b-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "privateconnect-37f5b",
+      storageBucket: "privateconnect-37f5b.firebasestorage.app",
+      messagingSenderId: "177183011219",
+      appId: "1:177183011219:web:11868ef01a65b2d46d7866"
+    };
+
+    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+    const db = firebase.database();
+
+    window.onload = () => {
+      const savedId = localStorage.getItem('myId');
+      if (savedId) showDashboard(savedId);
+      else document.getElementById('loginScreen').style.display = 'block';
+    };
+
+    function switchScreen(screenId) {
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('registerScreen').style.display = 'none';
+      document.getElementById(screenId).style.display = 'block';
+    }
+
+    function registerUser() {
+      const id = document.getElementById('regId').value.trim();
+      const pass = document.getElementById('regPass').value.trim();
+
+      if (!id || !pass) return alert("Bhai, ID aur Password dono daalo!");
+
+      db.ref('users/' + id).once('value', (snapshot) => {
+        if (snapshot.exists()) {
+          alert("Ye ID pehle se kisi ke paas hai. Koi dusri ID socho!");
+        } else {
+          db.ref('users/' + id).set({ password: pass, joinedAt: Date.now() }).then(() => {
+            alert("Account ban gaya! Welcome.");
+            localStorage.setItem('myId', id);
+            showDashboard(id);
+          });
+        }
+      });
+    }
+
+    function loginUser() {
+      const id = document.getElementById('loginId').value.trim();
+      const pass = document.getElementById('loginPass').value.trim();
+
+      if (!id || !pass) return alert("ID aur Password daalo!");
+
+      db.ref('users/' + id).once('value', (snapshot) => {
+        if (!snapshot.exists()) {
+          alert("Account nahi mila! Pehle register karo.");
+        } else {
+          const userData = snapshot.val();
+          if (!userData.password) {
+            db.ref('users/' + id).update({ password: pass }).then(() => {
+              localStorage.setItem('myId', id);
+              showDashboard(id);
+            });
+          } else if (userData.password === pass) {
+            localStorage.setItem('myId', id);
+            showDashboard(id);
+          } else {
+            alert("Galat Password!");
+          }
+        }
+      });
+    }
+
+    function showDashboard(id) {
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('registerScreen').style.display = 'none';
+      document.getElementById('dashboardSection').style.display = 'flex';
+      document.getElementById('usernameDisplay').innerText = id;
+      loadRecentChats(id);
+    }
+
+    function toggleMenu() {
+      const menu = document.getElementById('logoutMenu');
+      menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+    }
+
+    function logoutUser() {
+      localStorage.removeItem('myId');
+      window.location.reload(); 
+    }
+
+    function startNewChat() {
+      const target = document.getElementById('searchUser').value.trim();
+      const myId = localStorage.getItem('myId');
+      
+      if (!target) return alert("Dost ki ID daalo!");
+      if (target === myId) return alert("Khud se chat nahi kar sakte!");
+
+      db.ref('users/' + target).once('value', (snapshot) => {
+          if (snapshot.exists()) window.location.href = `chat.html?with=${target}`;
+          else alert("Error: Yeh ID Firebase mein hai hi nahi!");
+      });
+    }
+
+    function loadRecentChats(myId) {
+      const div = document.getElementById('recentChats');
+      db.ref('userChats/' + myId).on('value', (snapshot) => {
+        div.innerHTML = "";
+        if (!snapshot.exists()) {
+          div.innerHTML = "<p style='text-align:center; color:#8696a0; padding:20px;'>No chats yet.</p>";
+          return;
+        }
+        
+        snapshot.forEach(child => {
+          const friendId = child.key;
+          const firstLetter = friendId.charAt(0).toUpperCase();
+          const item = document.createElement('div');
+          item.className = "chat-item";
+          item.innerHTML = `
+            <div class="chat-avatar">${firstLetter}</div>
+            <div class="chat-info"><strong>${friendId}</strong></div>
+          `;
+          item.onclick = () => window.location.href = `chat.html?with=${friendId}`;
+          div.appendChild(item);
+        });
+      });
+    }
+  </script>
+</body>
+</html>
